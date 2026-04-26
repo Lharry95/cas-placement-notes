@@ -1,4 +1,3 @@
-```md
 # Weekly Reflection - Week 1
 
 ## Wins
@@ -20,4 +19,3 @@
 ## Next week's focus
 
 - Assigning tasks, Updating UI
-```
