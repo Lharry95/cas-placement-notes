@@ -56,3 +56,20 @@ work-placement-learning-log/
 └── reflections/
     ├── weekly-reflection-01.md
     └── template.md
+
+
+---
+
+## How to Use This Repo
+
+- **Weekly Logs** – Updated every week with what I worked on, what I learned, and my goals
+- **Code Snippets** – Useful code I want to remember and reference later
+- **Notes** – Topic-based notes on HTML, CSS, JavaScript, and debugging
+- **Reflections** – Honest weekly reflections on progress, mindset, and growth
+---
+
+## About Me
+
+**Lharyzza Va'ai** – Full Stack Developer in training at Mission Ready HQ, currently on work placement.
+GitHub: [github.com/Lharry95](https://github.com/Lharry95)
+```
