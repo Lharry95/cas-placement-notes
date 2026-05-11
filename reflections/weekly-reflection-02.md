@@ -1,8 +1,3 @@
----
-
-# 📄 `reflections/weekly-reflection-02.md`
-
-```md
 # Weekly Reflection - Week 2
 
 ## Wins
@@ -35,4 +30,7 @@
 - Refining UI interactions and usability
 - Improving consistency across components
 - Better understanding how the UI connects to underlying functionality
+
+```
+
 ```
