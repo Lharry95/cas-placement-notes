@@ -157,8 +157,8 @@ for (const [type, items] of Object.entries(byType)) {
 Inside template literals, a missing closing quote on a CSS class attribute causes everything after it to be misread as part of the string. The result looks like a render failure but the real cause is one character.
 
 ```js
-// BROKEN — missing closing " on the class name
-`<span class="pagination-page>Page ${n}</span>`// FIXED
+// BROKEN, missing closing " on the class name
+`<span class="pagination-page>Page ${n}</span>` // FIXED
 `<span class="pagination-page">Page ${n}</span>`;
 ```
 
@@ -173,6 +173,104 @@ When a user loads a new file, any saved state (like which page they were on) sho
 ```js
 // Reset all pagination to page 0 when a new file is loaded
 Object.keys(paginationState).forEach((key) => (paginationState[key] = 0));
+```
+
+---
+
+### Error handling — guard clauses
+
+A guard clause is an early return that stops a function if required data is missing. It protects the lines below it from crashing.
+
+**Guard clause order — always the same pattern:**
+
+1. Define the container
+2. Guard the container
+3. Guard `window.state`
+4. Guard the specific data the function needs
+5. Guard for empty results last
+
+```js
+function displayPropertiesTab() {
+  const container = document.getElementById("propertiesContent");
+
+  if (!container) {
+    console.error("Properties container not found");
+    return;
+  }
+
+  if (!window.state) {
+    console.error("State not ready");
+    return;
+  }
+
+  if (!window.state.allEntities) {
+    container.innerHTML = `<p class="error-banner">No entity data found. Please reload the file.</p>`;
+    return;
+  }
+
+  if (window.state.allEntities.length === 0) {
+    container.innerHTML = `<p class="error-banner">No entities found in this model.</p>`;
+    return;
+  }
+
+  // safe to proceed
+}
+```
+
+**Two audiences for error messages:**
+
+- Users → `container.innerHTML` with a plain English message
+- Developers → `console.error()` with a specific technical message
+
+---
+
+### DRY — Don't Repeat Yourself
+
+Instead of writing six nearly identical lines, use a dynamic value to target the right element:
+
+```js
+// BEFORE — repeated six times
+document.getElementById("entitiesContent").innerHTML = "...";
+document.getElementById("propertiesContent").innerHTML = "...";
+// ... four more times
+
+// AFTER — one dynamic line
+const container = document.getElementById(tabName + "Content");
+container.innerHTML = "...";
+```
+
+---
+
+### Checking if an object is empty
+
+An empty object `{}` is still truthy in JavaScript — `!obj` won't catch it.
+
+```js
+// WRONG: {} is truthy, this won't catch an empty object
+if (!window.state.modelInfo.project) { ... }
+
+// CORRECT:  checks whether the object has any keys
+if (Object.keys(window.state.modelInfo.project).length === 0) { ... }
+
+// FULL GUARD, check both: does it exist AND is it non-empty?
+if (!window.state.modelInfo.project ||
+    Object.keys(window.state.modelInfo.project).length === 0) { ... }
+```
+
+---
+
+### Variables vs strings — a common mistake
+
+Inside a function, using quotes around a parameter name means you're searching for a _literal_ element ID, not using the variable passed in.
+
+```js
+function showSkeleton(containerId) {
+  // WRONG: searches for an element literally called "containerID"
+  const container = document.getElementById("containerID");
+
+  // CORRECT: uses whatever was passed into containerId
+  const container = document.getElementById(containerId);
+}
 ```
 
 ---
