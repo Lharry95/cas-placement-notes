@@ -102,6 +102,95 @@ background-color: #1e1e1e; /* dark background */
 
 ---
 
+### Font Size and Colour for Contrast
+
+```css
+font-size: 14px;
+font-size: 1.2rem;
+color: #ffffff;
+background-color: #1e1e1e;
+```
+
+---
+
+### Error Banner — user-facing error messages
+
+A styled container for showing plain-English error messages inside tab panels when something goes wrong.
+
+```css
+.error-banner {
+  background: rgba(245, 87, 108, 0.15);
+  border: 1px solid rgba(245, 87, 108, 0.3);
+  color: #f5576c;
+  padding: 16px;
+  border-radius: 8px;
+  margin-top: 20px;
+}
+```
+
+Used in HTML like this:
+
+```html
+<p class="error-banner">No data found. Please reload the file.</p>
+```
+
+The colour (`#f5576c`) is a red from the existing design system — consistent with other error states in the app. The low-opacity background keeps it subtle rather than alarming.
+
+---
+
+### Loading Skeleton Animation
+
+A shimmer animation used to show placeholder content while real data is loading. Makes the app feel faster even if load time hasn't changed (perceived performance).
+
+```css
+/* The animation — fades in and out repeatedly */
+@keyframes shimmer {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* Base skeleton class — applied to every placeholder bar */
+.skeleton {
+  background: rgba(30, 30, 50, 0.6);
+  border-radius: 4px;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Group header row — shorter, taller */
+.skeleton-row-header {
+  width: 25%;
+  height: 25px;
+  margin-bottom: 20px;
+}
+
+/* Item row — wider, shorter, indented */
+.skeleton-row-item {
+  width: 40%;
+  height: 16px;
+  margin-left: 15px;
+  margin-bottom: 20px;
+}
+```
+
+**Key decisions:**
+
+- `rgba(30, 30, 50, 0.6)` — already in the design system, sits naturally on the dark background
+- `1.5s` — one complete shimmer cycle (visible → faded → visible)
+- `infinite` — keeps looping until real content replaces it
+- `ease-in-out` — smooth transition, not a sharp flash
+- Widths in `%` not `px` — scales across different screen widths
+- Header row is narrower (25%) because IFC type names are short (e.g. "IfcWall")
+- Item row is wider (40%) because entity names are longer
+
+---
+
 ## Resources
 
 - [MDN CSS Reference](https://developer.mozilla.org/en-US/docs/Web/CSS)
