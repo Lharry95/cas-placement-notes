@@ -191,9 +191,52 @@ A shimmer animation used to show placeholder content while real data is loading.
 
 ---
 
+### CSS Grid and Collapsible Sidebars
+
+When a sidebar is inside a CSS Grid layout, changing the element's `width` alone does not affect the grid column it sits in. The grid column itself must be updated via JavaScript for the neighbouring content to expand and fill the space.
+
+```js
+// WRONG: only shrinks the sidebar visually, does not free up grid space
+sidebar.style.width = "48px";
+
+// CORRECT: updates the grid column so the main content expands automatically
+document.querySelector(".app-layout").style.gridTemplateColumns = "48px 1fr";
+```
+
+When the main content column is set to `1fr`, it automatically takes all remaining available space. You do not need to calculate a new pixel value.
+
+---
+
+### max-height Transitions on Flex Children
+
+`height` transitions do not work reliably on elements inside a flexbox layout. Use `max-height` instead.
+
+```css
+/* Set a large max-height in CSS to allow the element to show fully */
+#viewer-body {
+  max-height: 2000px;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+}
+```
+
+```js
+// Collapse: set max-height to 0
+viewerBody.style.maxHeight = "0px";
+
+// Expand: restore the large value
+viewerBody.style.maxHeight = "2000px";
+```
+
+The transition animates between the two values. This works because `max-height` has a concrete start and end value to animate between. `height: auto` does not the browser cannot calculate how to animate to an unknown value.
+
+---
+
 ## Resources
 
 - [MDN CSS Reference](https://developer.mozilla.org/en-US/docs/Web/CSS)
 - [CSS Tricks Flexbox Guide](https://css-tricks.com/snippets/css/a-guide-to-flexbox/)
-- [CSS Grid Guide – CSS Tricks](https://css-tricks.com/snippets/css/complete-guide-grid/)
-- [Contrast Checker – WebAIM](https://webaim.org/resources/contrastchecker/)
+- [CSS Grid Guide CSS Tricks](https://css-tricks.com/snippets/css/complete-guide-grid/)
+- [MDN @keyframes](https://developer.mozilla.org/en-US/docs/Web/CSS/@keyframes)
+- [MDN max-height](https://developer.mozilla.org/en-US/docs/Web/CSS/max-height)
+- [Contrast Checker WebAIM](https://webaim.org/resources/contrastchecker/)

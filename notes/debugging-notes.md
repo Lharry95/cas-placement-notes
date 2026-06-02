@@ -69,7 +69,7 @@
 
 **Root cause:** Navigation state inside the panel isn't being tracked, so there's no history to go back to.
 
-**Fix:** Still unresolved.
+**Fix:** Resolved in Week 6 using a navigation history stack.
 
 **What I learned:** Panel-based navigation needs to track state so users can move backwards through views. This is different from browser navigation and needs to be handled manually in JavaScript.
 
@@ -115,7 +115,7 @@ paginationState[tabKey] = Math.max(0, newPage);
 
 **What happened:** The entire Entities tab stopped rendering and threw a `groupId is not defined` error.
 
-**Root cause:** A single missing variable declaration `const groupId = \`group-${type}\``inside`displayEntitiesTab()`. Every line referencing `groupId` after it was breaking.
+**Root cause:** A single missing variable declaration `const groupId` inside `displayEntitiesTab()`. Every line referencing `groupId` after it was breaking.
 
 **Fix:** Added the missing `const groupId` declaration in the right place inside the loop.
 
@@ -196,6 +196,147 @@ const container = document.getElementById(containerId);
 
 ---
 
+## Week 6
+
+### 3D Canvas Blank After HTML Restructure
+
+**What happened:** After restructuring the HTML, the 3D viewer canvas went completely blank.
+
+**Root cause:** Two divs both had `id="viewer-container"`. `getElementById` only finds the first one, so Three.js was targeting the wrong element. No error was thrown.
+
+**Fix:** Removed the duplicate wrapper div so only one element has `id="viewer-container"`.
+
+**What I learned:** Duplicate IDs cause silent failures. `getElementById` finds the first match and ignores any others. Always keep IDs unique. When something renders blank with no console error, check for duplicate IDs in the HTML.
+
+---
+
+### Viewer Collapse Toggle Not Working
+
+**What happened:** Clicking the viewer collapse button had no visible effect.
+
+**Root cause:** The code was transitioning `height`, which does not work reliably on elements inside a flexbox layout.
+
+**Fix:** Switched to a `max-height` transition instead.
+
+```css
+/* Set a large max-height in CSS */
+#viewer-body {
+  max-height: 2000px;
+  transition: max-height 0.3s ease;
+  overflow: hidden;
+}
+```
+
+```js
+// Collapse
+viewerBody.style.maxHeight = "0px";
+
+// Expand
+viewerBody.style.maxHeight = "2000px";
+```
+
+**What I learned:** `height` transitions do not animate reliably on flex children. `max-height` works because the browser can calculate the transition between two concrete values. `height: auto` to `0` does not work because `auto` has no concrete value to animate from.
+
+---
+
+### Bottom Tabs Showing "Load IFC First" Despite File Being Loaded
+
+**What happened:** After loading an IFC file and clicking a bottom viewer tab, the panel showed "Load an IFC file first" even though a file was already loaded.
+
+**Root cause:** The guard clause was checking `currentModelID`, which is set by the 3D loader. The IFC parser sets `allEntities`, and that was not ready yet when the guard ran.
+
+**Fix:** Changed the guard to check `allEntities.length` instead.
+
+```js
+// WRONG: checks the 3D loader state, not the parsed data state
+if (!window.state?.currentModelID) { ... }
+
+// CORRECT: checks whether the IFC parser has actually finished
+if (!window.state?.allEntities?.length) { ... }
+```
+
+**What I learned:** Guard clauses must check the right piece of state. Using the wrong variable means the check passes or fails at the wrong time.
+
+---
+
+### Bottom Tabs Required Clicking Another Tab First
+
+**What happened:** On first click, a bottom viewer tab showed no data. Clicking a different tab and then back made it work.
+
+**Root cause:** The guard clause ran before `lazyLoadEntities` had finished populating state. The check happened too early.
+
+**Fix:** Moved the guard inside the `setTimeout` callback, after the `await lazyLoadEntities` call.
+
+```js
+setTimeout(async function () {
+  await window.lazyLoadEntities(window.state?.currentModelID);
+
+  // Guard runs here, AFTER data has loaded
+  if (!window.state?.allEntities?.length) {
+    panel.innerHTML = "Load an IFC file first.";
+    return;
+  }
+
+  panel.innerHTML = buildViewerEntitiesHTML();
+}, 0);
+```
+
+**What I learned:** When async data is involved, guards must run after the `await`, not before it. Putting the guard before the `await` means it checks state that has not been populated yet.
+
+---
+
+### `ReferenceError: isSidebarOpen` After Editing the File
+
+**What happened:** The sidebar toggle threw a `ReferenceError: isSidebarOpen is not defined`.
+
+**Root cause:** The `let isSidebarOpen` declaration had been accidentally deleted from the file during editing.
+
+**Fix:** Re-added `let isSidebarOpen = true` at module scope at the top of `ui.js`.
+
+**What I learned:** State variables that are referenced across multiple functions must be declared at module scope. If they are missing, every function that references them throws a ReferenceError.
+
+---
+
+### Main Content Not Expanding When Sidebar Collapsed
+
+**What happened:** Collapsing the sidebar made it visually smaller but the main content area did not expand to fill the freed space.
+
+**Root cause:** Changing `width` on the sidebar element does not affect the grid column it sits in. The grid layout controls how space is distributed, not the element's own width.
+
+**Fix:** Updated `grid-template-columns` on the parent layout element directly via JavaScript on every toggle.
+
+```js
+// WRONG: only shrinks the sidebar, does not affect the grid column
+sidebar.style.width = "48px";
+
+// CORRECT: updates the grid so the main content column expands automatically
+document.querySelector(".app-layout").style.gridTemplateColumns = "48px 1fr";
+```
+
+**What I learned:** In a CSS Grid layout, the grid column controls space distribution. Changing an element's `width` inside a grid column has no effect on the surrounding layout. Always update `gridTemplateColumns` on the parent to change how space is shared.
+
+---
+
+### Post-Merge Breakage After Pulling Teammate Code
+
+**What happened:** After merging a teammate's code, three things broke at once: a syntax error on load, all tabs hidden immediately on page load, and the bottom viewer tabs reverting to broken behaviour.
+
+**Root cause:**
+
+1. `entityNavStack` was declared before the `import` statement. In JavaScript modules, `import` must always be the first statement.
+2. Loose `querySelectorAll` code was placed outside any function, running once on page load and hiding all tab content immediately.
+3. `switchViewerTab` was reverted to the old version with the wrong guard clause.
+
+**Fix:**
+
+1. Moved `entityNavStack` declaration to below the `import` statement.
+2. Deleted the two loose lines outside the function (they were already correctly inside `switchTab`).
+3. Replaced `switchViewerTab` with the corrected version using `allEntities.length` as the guard.
+
+**What I learned:** After merging a teammate's code, always check that your own work is still intact. Merge conflicts do not always produce visible errors. Sometimes code is silently overwritten or duplicated in the wrong place.
+
+---
+
 ## Debugging Checklist
 
 When something isn't working, go through this list:
@@ -203,12 +344,15 @@ When something isn't working, go through this list:
 - [ ] Check the browser console for errors
 - [ ] `console.log()` the value you're unsure about
 - [ ] Check if the same code exists in more than one place (HTML and JS)
+- [ ] Check for duplicate element IDs in the HTML
 - [ ] Check what CSS classes are applied to an element on load
 - [ ] Check if the element exists in the DOM before selecting it
 - [ ] Inspect the actual rendered HTML in DevTools. The cause is often smaller than the symptom
 - [ ] Check that variable names inside functions aren't accidentally in quotes
 - [ ] Check that variables used in `catch` blocks are declared inside that block
 - [ ] For objects, use `Object.keys(obj).length === 0` not `!obj` to check if empty
+- [ ] For async data, make sure guard clauses run after the `await`, not before it
+- [ ] After merging a teammate's code, check that your own work is still intact
 - [ ] Read the error message carefully. It usually tells you where the problem is
 - [ ] If the bug is too large to solve alone, document it clearly and escalate
 
@@ -220,3 +364,4 @@ When something isn't working, go through this list:
 - [MDN – Debugging HTML](https://developer.mozilla.org/en-US/docs/Learn/HTML/Introduction_to_HTML/Debugging_HTML)
 - [MDN – try...catch](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch)
 - [MDN – Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
+- [MDN – setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)

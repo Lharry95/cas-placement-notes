@@ -275,9 +275,94 @@ function showSkeleton(containerId) {
 
 ---
 
+### Navigation history stack back button pattern
+
+An array used as a stack lets users navigate forward and back through views. `push` saves the current state before moving forward. `pop` restores it when going back. This naturally supports multiple drill-down levels.
+
+```js
+// Declare at module scope so it persists across function calls
+const entityNavStack = [];
+
+// Before navigating forward, save the current HTML
+entityNavStack.push(document.getElementById("entitiesContent").innerHTML);
+
+// When going back, restore the saved HTML
+window.entityNavBack = function () {
+  if (!entityNavStack.length) return;
+  document.getElementById("entitiesContent").innerHTML = entityNavStack.pop();
+};
+```
+
+Important: this variable must be declared at the top level of the file, outside any function. If it is declared inside a function it resets to an empty array every time that function runs.
+
+---
+
+### setTimeout(fn, 0) yielding to the render thread
+
+`setTimeout` with a delay of 0 does not run immediately. It pushes the callback to run after the browser has finished its current work, including painting the screen. This is useful when you want the user to see a "Loading..." message before heavy JavaScript runs.
+
+```js
+panel.innerHTML = `<p>Loading...</p>`;
+
+// Without setTimeout, the browser tries to paint AND run the data build at the same time
+// The "Loading..." message never appears
+setTimeout(async function () {
+  await window.lazyLoadEntities(window.state?.currentModelID);
+  panel.innerHTML = buildViewerEntitiesHTML();
+}, 0);
+```
+
+This technique is called "yielding to the render thread" and is a standard pattern in Vanilla JavaScript.
+
+---
+
+### Module-scope vs function-scope variables
+
+Variables declared inside a function are reset every time that function runs. Variables declared at module scope (outside all functions, at the top of the file) persist for the lifetime of the page.
+
+```js
+// WRONG: resets to [] every time the function is called
+function showEntityDetail(entity) {
+  const entityNavStack = []; // starts fresh every call
+  entityNavStack.push(...);
+}
+
+// CORRECT: persists across all function calls
+const entityNavStack = []; // declared once at the top of the file
+
+function showEntityDetail(entity) {
+  entityNavStack.push(...); // uses the same array every time
+}
+```
+
+---
+
+### Guard clauses must check the right piece of state
+
+Using the wrong variable as a guard means your check passes or fails at the wrong time.
+
+```js
+// WRONG: currentModelID is set by the 3D loader, not the IFC parser
+// The file may be loading but the parsed data is not ready yet
+if (!window.state?.currentModelID) {
+  panel.innerHTML = "Load an IFC file first.";
+  return;
+}
+
+// CORRECT: allEntities.length confirms the parsed data is actually ready
+if (!window.state?.allEntities?.length) {
+  panel.innerHTML = "Load an IFC file first.";
+  return;
+}
+```
+
+---
+
 ## Resources
 
 - [MDN JavaScript Reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-- [MDN – Array.prototype.slice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice)
-- [MDN – Array.prototype.reduce()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce)
-- [MDN – Math.max()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max)
+- [MDN Array.prototype.slice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice)
+- [MDN Array.prototype.reduce()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce)
+- [MDN Math.max()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max)
+- [MDN Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
+- [MDN setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)
