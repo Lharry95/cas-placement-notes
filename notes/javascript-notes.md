@@ -358,11 +358,110 @@ if (!window.state?.allEntities?.length) {
 
 ---
 
+### Property existence checks must be at the right level
+
+Checking a whole object tells you whether that object exists. It does not tell you whether the specific key you need is inside it.
+
+```js
+// WRONG: always truthy if allProperties exists at all, even if it has no data for this entity
+if (window.state.allProperties) {
+  showProperties(entityId);
+}
+
+// CORRECT: checks whether data exists for the specific entity
+if (window.state.allProperties?.[entityId]) {
+  showProperties(entityId);
+}
+```
+
+This was the cause of entity links in the Relationships tab only showing the Identity section. The check was passing for every entity even when only Identity data had been loaded.
+
+---
+
+### Map lookups vs repeated .find() calls
+
+Using `.find()` on an array inside a loop is O(n) every time it runs. Converting the array to a `Map` once gives O(1) lookups and is significantly faster when there are many entities to look up.
+
+```js
+// SLOW: .find() scans the whole array every time
+function getEntity(id) {
+  return window.state.allEntities.find((e) => e.id === id);
+}
+
+// FAST: build the Map once, then look up by key instantly
+const entityMap = new Map(window.state.allEntities.map((e) => [e.id, e]));
+
+function getEntity(id) {
+  return entityMap.get(id);
+}
+```
+
+---
+
+### Vite tree-shaking and module registration
+
+Vite strips imports that have no side effects during the build process. If you import a file just to run it (a side-effect-only import), Vite may remove it. Functions must be explicitly exported from their file and registered somewhere that Vite can trace as used.
+
+```js
+// WRONG: Vite may tree-shake this away because nothing is imported from it
+await import('./js/ui-viewer.js');
+
+// CORRECT: explicitly export functions from ui-viewer.js
+export function toggleViewerCollapse() { ... }
+
+// Then register them via window-api.js so they are reachable
+import { toggleViewerCollapse } from './ui-viewer.js';
+window.toggleViewerCollapse = toggleViewerCollapse;
+```
+
+---
+
+### Duplicate local definitions override imports silently
+
+After moving a function to a new file and importing it, if the original definition still exists in the old file it will silently override the imported version. There is no error or warning.
+
+```js
+// ui.js -- after refactor, this import is at the top
+import { generateSummaryStats } from "./ui-display.js";
+
+// If this original definition is still in ui.js below the import,
+// it overrides the imported version silently
+function generateSummaryStats() {
+  // old version -- this wins, not the import
+}
+```
+
+After moving a function, always delete the original from the old file before testing.
+
+---
+
+### Async functions and lazy loading timing
+
+If a function calculates stats or displays data that depends on lazy-loaded state, it must `await` the loaders before running the calculation. Calling the function before the loaders finish results in zeros or missing data.
+
+```js
+// WRONG: calculates stats before data has loaded
+function updateStatsOverview() {
+  const count = window.state.allEntities.length; // 0 if not loaded yet
+}
+
+// CORRECT: await the loaders first, then calculate
+async function updateStatsOverview() {
+  await lazyLoadEntities(window.state.currentModelID);
+  await lazyLoadProperties(window.state.currentModelID);
+  const count = window.state.allEntities.length; // correct value now
+}
+```
+
+---
+
 ## Resources
 
 - [MDN JavaScript Reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-- [MDN Array.prototype.slice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice)
-- [MDN Array.prototype.reduce()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce)
-- [MDN Math.max()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max)
-- [MDN Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
-- [MDN setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)
+- [MDN -- Array.prototype.slice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice)
+- [MDN -- Array.prototype.reduce()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce)
+- [MDN -- Math.max()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max)
+- [MDN -- Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
+- [MDN -- setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)
+- [MDN -- Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)
+- [Vite -- Dependency Pre-Bundling](https://vitejs.dev/guide/dep-pre-bundling)
