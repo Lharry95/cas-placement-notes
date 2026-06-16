@@ -434,13 +434,191 @@ async function updateStatsOverview() {
 
 ---
 
+## Week 7
+
+### Data Loading But Not Displaying After Refactor
+
+**What happened:** After the `ui.js` file separation refactor, loading an IFC file showed all the correct console log messages but nothing appeared in any of the tabs.
+
+**Root cause:** `generateSummaryStats` and `generateMaterialTakeOff` had been moved to `ui-display.js` and imported at the top of `ui.js`, but the original definitions were still sitting below in `ui.js` and silently overriding the imports.
+
+**Fix:** Deleted the two duplicate function definitions from `ui.js`.
+
+**What I learned:** Moving a function to a new file is only half the job. The original must be deleted or it will silently override the import. Always search the old file for the function name after moving it.
+
+---
+
+### Entity Links in Relationships Tab Only Showing Identity Section
+
+**What happened:** Clicking an entity link navigated to the entity detail view but only the Identity section had data.
+
+**Root cause:** The condition checking whether property data had loaded was testing `window.state.allProperties` as a whole object. Because the object existed, the check always passed even when the specific entity's data had not been loaded.
+
+**Fix:** Changed the check to test for the specific entity key.
+
+```js
+// WRONG: passes as long as allProperties exists
+if (window.state.allProperties) { ... }
+
+// CORRECT: checks whether data exists for this specific entity
+if (window.state.allProperties?.[entityId]) { ... }
+```
+
+**What I learned:** A check at the wrong level of a data structure will pass when it should not. Always check the specific key you actually need.
+
+---
+
+### Stats Bar Showing Zeros After File Load
+
+**What happened:** After loading an IFC file, the stats bar showed zeros for all counts.
+
+**Root cause:** `updateStatsOverview` was being called before `lazyLoadEntities` and `lazyLoadProperties` had finished populating state.
+
+**Fix:** Made `updateStatsOverview` async and added `await` calls for both lazy loaders before the stats calculation runs.
+
+```js
+async function updateStatsOverview() {
+  await lazyLoadEntities(window.state.currentModelID);
+  await lazyLoadProperties(window.state.currentModelID);
+  const count = window.state.allEntities.length;
+}
+```
+
+**What I learned:** Any function that depends on lazy-loaded data must await the loaders before running.
+
+---
+
+### Vite HMR WebSocket Error on Dev Server Start
+
+**What happened:** The Vite development server was throwing a WebSocket connection error on startup, disrupting Hot Module Replacement.
+
+**Root cause:** No `server.hmr` configuration was set in `vite.config.js`.
+
+**Fix:** Added a `server.hmr` block to `vite.config.js` with the correct host and port settings.
+
+**What I learned:** Vite HMR relies on a WebSocket connection between the browser and the dev server. Configuring `server.hmr` explicitly fixes environment-specific connection issues.
+
+---
+
+### Module Import Failure From Missing Closing Brace
+
+**What happened:** The entire module failed to import and threw a syntax error on load.
+
+**Root cause:** A missing closing brace `}` in an `if` block in `parser.js` made the file unparseable.
+
+**Fix:** Added the missing `}` in the correct place.
+
+**What I learned:** A single missing brace can make an entire file fail to parse. When a module import fails with a syntax error and nothing obvious is wrong, check for unclosed blocks by working backwards from the end of the file.
+
+---
+
+## Week 8
+
+### Post-Merge Regression Across Six Tabs
+
+**What happened:** After merging the Zeus branch, the Quantities, Materials, Project Info, Units, Footprints, and Floor Plan tabs all stopped displaying data.
+
+**Root cause:** `buildIfcIndexesChunked` in Zeus's `chunked-parser.js` returned only `byType` and `byGUID` indexes. The existing `parser-properties.js` and `parser-footprints.js` also required `relDefinesByObject` and `relSpaceBoundaryBySpace`. Those keys did not exist in the chunked version, so every lookup silently returned nothing.
+
+**Fix:** In `file-handler.js`, after `buildIfcIndexesChunked` ran, the two missing keys were added by calling `buildIfcIndexes` and merging the result. Zeus's `chunked-parser.js` was not modified.
+
+```js
+window.state.ifcIndexes = await buildIfcIndexesChunked(
+  window.state.currentModelID
+);
+
+const { relDefinesByObject, relSpaceBoundaryBySpace } = buildIfcIndexes(
+  window.state.currentModelID
+);
+window.state.ifcIndexes.relDefinesByObject = relDefinesByObject;
+window.state.ifcIndexes.relSpaceBoundaryBySpace = relSpaceBoundaryBySpace;
+```
+
+**What I learned:** When a new parser replaces an existing one, all downstream consumers must be audited for the specific keys they depend on. Index shape mismatches fail silently with no error thrown. Never modify a teammate's file to fix an interface mismatch. Fix it where you consume their output.
+
+---
+
+### Project Info and Units Tabs Empty After Merge
+
+**What happened:** Even after fixing the index mismatch, the Project Info and Units tabs were still empty.
+
+**Root cause:** `extractModelInfoChunked` returned placeholder data for units and project info rather than real values from the IFC file.
+
+**Fix:** After `extractModelInfoChunked` ran, the real `extractModelInfo` was called to supplement the result with actual data.
+
+**What I learned:** A performance-optimised version of a function may not extract the same data as the original. When replacing a function with an optimised version, check that the output is equivalent, not just structurally similar.
+
+---
+
+### Quantities Tab Showing Empty Name and Value
+
+**What happened:** The Quantities tab was rendering rows correctly but every row had `name: ""` and `value: null`.
+
+**Root cause:** `getQuantitiesSmart` in `parser-properties.js` uses `window.state.ifcLineCache.get()` to fetch quantity data. The chunked cache had a `.get()` method that called `window.state.ifcApi.WriteLine` internally instead of `GetLine`. `WriteLine` is a write method, not a read method, so the data returned was empty.
+
+**Fix:** Updated `lazy-loader.js` so that when properties load, `ifcLineCache` is replaced with a cache that uses `GetLine` correctly.
+
+**What I learned:** In the web-ifc API, `GetLine` reads a line from the model and `WriteLine` writes or modifies it. They are not interchangeable. Using the wrong one returns empty data with no error thrown.
+
+---
+
+### 3D Viewer Lagging After Merge
+
+**What happened:** After the merge, the 3D viewer became noticeably laggy when loading a file.
+
+**Root cause:** `file-handler.js` was calling both `buildIfcIndexesChunked` and `buildIfcIndexes` back to back on the main thread at file load time. The second call was a full synchronous scan of every relationship in the IFC file, blocking the renderer.
+
+**Fix:** Removed the `buildIfcIndexesChunked` call entirely and used only `buildIfcIndexes`.
+
+```js
+// Before: two index builders running back to back
+window.state.ifcIndexes = await buildIfcIndexesChunked(
+  window.state.currentModelID
+);
+const { relDefinesByObject, relSpaceBoundaryBySpace } = buildIfcIndexes(
+  window.state.currentModelID
+);
+
+// After: one builder that produces everything needed
+window.state.ifcIndexes = buildIfcIndexes(window.state.currentModelID);
+```
+
+**What I learned:** Running expensive operations on the main thread at file load time blocks the renderer. Running the same work twice is always a sign something went wrong during a merge.
+
+---
+
+## Debugging Checklist
+
+When something is not working, go through this list:
+
+- [ ] Check the browser console for errors
+- [ ] `console.log()` the value you are unsure about
+- [ ] Check if the same code exists in more than one place (HTML and JS)
+- [ ] Check for duplicate element IDs in the HTML
+- [ ] Check what CSS classes are applied to an element on load
+- [ ] Check if the element exists in the DOM before selecting it
+- [ ] Inspect the actual rendered HTML in DevTools. The cause is often smaller than the symptom
+- [ ] Check that variable names inside functions are not accidentally in quotes
+- [ ] Check that variables used in `catch` blocks are declared inside that block
+- [ ] For objects, use `Object.keys(obj).length === 0` not `!obj` to check if empty
+- [ ] For async data, make sure guard clauses run after the `await`, not before it
+- [ ] After merging a teammate's code, check that your own work is still intact
+- [ ] After moving a function to a new file, delete the original from the old file
+- [ ] Check that property existence checks are at the right level, not one level too high
+- [ ] If data is loading but not displaying, check for duplicate function definitions overriding imports
+- [ ] After a merge, audit all downstream consumers of any replaced function for the specific keys they depend on
+- [ ] In web-ifc, check whether a cache abstraction is wrapping `GetLine` or `WriteLine`
+- [ ] Read the error message carefully. It usually tells you where the problem is
+- [ ] If the bug is too large to solve alone, document it clearly and escalate
+
+---
+
 ## Resources
 
-- [MDN JavaScript Reference](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-- [MDN -- Array.prototype.slice()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/slice)
-- [MDN -- Array.prototype.reduce()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/reduce)
-- [MDN -- Math.max()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/max)
-- [MDN -- Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
-- [MDN -- setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)
-- [MDN -- Map](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)
-- [Vite -- Dependency Pre-Bundling](https://vitejs.dev/guide/dep-pre-bundling)
+- [Chrome DevTools Docs](https://developer.chrome.com/docs/devtools/)
+- [MDN Debugging HTML](https://developer.mozilla.org/en-US/docs/Learn/HTML/Introduction_to_HTML/Debugging_HTML)
+- [MDN try...catch](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/try...catch)
+- [MDN Object.keys()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/keys)
+- [MDN setTimeout()](https://developer.mozilla.org/en-US/docs/Web/API/setTimeout)
+- [Vite Dependency Pre-Bundling](https://vitejs.dev/guide/dep-pre-bundling)
+- [web-ifc API docs](https://ifcjs.github.io/info/docs/Guide/web-ifc/Introduction)
